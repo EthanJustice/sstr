@@ -1,0 +1,12 @@
+[package]
+name = "sstr"
+version = "0.1.0"
+authors = ["EthanJustice <47954690+EthanJustice@users.noreply.github.com>"]
+edition = "2018"
+readme = "README.md"
+homepage = "https://github.com/EthanJustice/sstr"
+repository = "https://github.com/EthanJustice/sstr"
+license = "MIT"
+publish = false
+
+[dependencies]
