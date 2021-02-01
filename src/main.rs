@@ -1,7 +1,10 @@
+#![feature(command_access)]
+
 // std
-use std::env::current_dir;
+use std::env::{current_dir, vars};
 use std::fs::read_to_string;
 use std::process::{exit, Command, Stdio};
+use std::{collections::HashMap, env::var};
 
 // external
 use clap::{App, Arg, SubCommand};
@@ -14,7 +17,7 @@ fn main() {
         .about(env!("CARGO_PKG_DESCRIPTION"))
         .author(env!("CARGO_PKG_AUTHORS"))
         .subcommand(
-            SubCommand::with_name("exec")
+            SubCommand::with_name("run")
                 .author(env!("CARGO_PKG_AUTHORS"))
                 .about("Execute a task defined in the active workspace.")
                 .arg(
@@ -26,8 +29,9 @@ fn main() {
         )
         .get_matches();
 
-    if let Some(subcommand) = app.subcommand_matches("exec") {
+    if let Some(subcommand) = app.subcommand_matches("run") {
         let current_dir = current_dir().expect("Failed to get the working directory, aborting...");
+
         let configuration_file = read_to_string(current_dir.join("sstr.json"))
             .expect("Failed to read the configuration file, aborting...");
 
@@ -38,47 +42,66 @@ fn main() {
             .value_of("task")
             .expect("Failed to provide a task, aborting...");
         if serialised.is_object() == true {
-            serialised[task]
+            let mut all = serialised[task]
                 .as_array()
                 .expect("Configuration file is invalid, aborting...")
-                .iter()
-                .for_each(|cmd| {
-                    let cmd_str = cmd.as_str().unwrap();
-                    let script_vec: Vec<String> = cmd_str
-                        .split(" ")
-                        .take(2)
-                        .filter(|i| i.contains("-") == false)
-                        .map(|i| String::from(i))
-                        .collect();
+                .clone();
+            let cmd = &all[0].to_string();
 
-                    let mut script: String = String::from(script_vec[0].clone());
-                    for i in script_vec.iter().skip(1) {
-                        let new = format!(" {}", i);
-                        script.push_str(new.as_str());
-                    }
+            all.remove(0);
 
-                    let args: Vec<String> = cmd_str
-                        .split("--")
-                        .skip(1)
-                        .map(|i| {
-                            println!("i: {}", i);
-                            let new = format!("--{}", i);
-                            String::from(new.as_str())
-                        })
-                        .collect();
+            let mut path = var("PATH").unwrap_or(
+                std::env::current_dir()
+                    .expect("Failed to get the current working directory.")
+                    .to_str()
+                    .unwrap()
+                    .to_string(),
+            );
+            path.push_str(cmd);
+            println!("{:#?}", path);
 
-                    println!("Running script {:#?} with args {:#?}", script, args);
-                    Command::new(script)
-                        .args(args)
-                        .stdout(Stdio::piped())
-                        .output()
-                        .expect("Failed to run task.");
-                });
+            let mut command = Command::new(path);
+
+            command.current_dir(
+                std::env::current_dir().expect("Failed to get the current working directory."),
+            );
+
+            let vars: HashMap<String, String> = vars().collect();
+            command.envs(vars);
+
+            if all.len() > 0 {
+                let all: Vec<String> = all.iter().map(|f| f.to_string()).collect();
+
+                for ref arg in all.iter() {
+                    command.arg(arg);
+                }
+            }
+
+            match command
+                .stdout(Stdio::inherit())
+                .stdin(Stdio::inherit())
+                .output()
+            {
+                Ok(out) => {
+                    println!(
+                        "Task {} with args {:#?} successfully exited with code {}",
+                        cmd,
+                        all,
+                        out.status.to_string()
+                    );
+                }
+                Err(err) => {
+                    eprintln!("Failed to run task {}: {}", cmd, err.to_string());
+                    panic!()
+                }
+            }
         } else {
             println!(
                 "Configuration file is invalid (top-level item is not an object), aborting..."
             );
             exit(1)
         }
+    } else {
+        eprintln!("Invalid command!");
     }
 }
