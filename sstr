@@ -1,0 +1,5 @@
+{
+    "commands": {
+        "echo": "echo echo"
+    }
+}

@@ -14,17 +14,25 @@ type Config struct {
 	Commands map[string]string `json:"commands"`
 }
 
+func NameAndFields(str string) (string, []string) {
+	fields := strings.Fields(str)
+
+	return fields[0], fields[1:]
+}
+
 func main() {
 	var config Config
-	f, err := ioutil.ReadFile("sstr.json")
+	f, err := ioutil.ReadFile("sstr")
 	if err != nil {
-		panic("No valid sstr config found in the current working directory.")
+		fmt.Println("No valid sstr config found in the current working directory.")
+		os.Exit(1)
 	}
 
 	json := json.Unmarshal(f, &config)
 
 	if json != nil {
-		panic("failed to parse configuration file!")
+		fmt.Println("failed to parse configuration file!")
+		os.Exit(1)
 	}
 
 	t := flag.String("cmd", "", "command to run")
@@ -32,18 +40,18 @@ func main() {
 	flag.Parse()
 
 	if x, found := config.Commands[*t]; found {
-		fields := strings.Fields(x)
+		name, args := NameAndFields(x)
 
-		fmt.Printf("\nrunning command %s with args %s\n", fields[0], fields[1:])
+		fmt.Printf("\nrunning command %s with args %s\n", name, args)
 
-		exe, err := exec.LookPath(fields[0])
+		exe, err := exec.LookPath(name)
 		if err != nil {
 			fmt.Println(exe, err)
-			panic("couldn't find executable with that name!")
+			fmt.Println("couldn't find executable with that name!")
+			os.Exit(1)
 		}
-		args := fields[0:]
 
-		cmd := exec.Command(fields[0], args...)
+		cmd := exec.Command(name, args...)
 		cmd.Path = exe
 
 		cmd.Stdout = os.Stdout
@@ -52,11 +60,16 @@ func main() {
 
 		res := cmd.Run()
 		if res != nil {
-			fmt.Printf("\ncommand %s successfully ran", *t)
-		} else {
 			fmt.Printf("\ncommand failed to run: %s", res.Error())
+		} else {
+			fmt.Printf("\ncommand %s ran successfully", *t)
 		}
-	} else if found == false {
-		panic("command not found!")
+
+		os.Exit(0)
+	} else if !found {
+		fmt.Println("command not found!")
+		os.Exit(1)
 	}
+
+	os.Exit(1)
 }
